@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +13,7 @@
     rel="stylesheet">
   <!-- OTPAuth for browser-side TOTP calculation -->
   <script src="https://cdn.jsdelivr.net/npm/otpauth@9.1.2/dist/otpauth.umd.min.js"></script>
+
   <style>
     :root {
       --primary: #2563eb;
@@ -405,7 +407,7 @@
       }
 
       const cleanBaseUrl = SUPABASE_URL.replace(/\/$/, "");
-      const requestUrl = `${cleanBaseUrl}/rest/v1/accounts?secret_id=eq.${accountId}&select=*`;
+      const requestUrl = `${cleanBaseUrl}/rest/v1/rpc/get_account?secret_uuid=${accountId}`;
 
       try {
         const response = await fetch(requestUrl, {
@@ -521,6 +523,7 @@
       }, 2000);
     }
 
+    // Run setup on load
     loadAccountData();
   </script>
 </body>
