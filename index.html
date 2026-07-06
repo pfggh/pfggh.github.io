@@ -312,6 +312,9 @@
 
   <div class="container">
     <div class="card">
+      <div style="text-align: center; margin-bottom: -0.5rem;">
+        <img src="logo.svg" alt="Teshrij Logo" style="height: 48px; object-fit: contain;">
+      </div>
       <div class="card-header">
         <h1>Access Portal</h1>
         <p>Your security credentials and 2FA key</p>
@@ -358,7 +361,8 @@
             <div class="code-display">
               <input type="text" id="val-code" class="code-input-transparent" readonly value="------">
               <button class="btn-copy-icon" onclick="copyValue('val-code', 'Code')" title="Copy Code">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
@@ -372,9 +376,21 @@
         </div>
       </div>
 
+      <!-- Expired Display -->
+      <div id="expired-container" class="hidden" style="text-align: center; padding: 1rem 0;">
+        <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.75rem;">Contact Support</h2>
+        <p style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">
+          login links now only work for 30 minutes per activation. kindly message us for reactivation
+        </p>
+        <div style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.5; margin-top: 1rem;">
+          Support: 71 083 892 - 76 970 994
+        </div>
+      </div>
+
       <div id="error-box" class="error-msg">Loading credentials...</div>
     </div>
   </div>
+
 
   <div id="toast-container" class="toast-container"></div>
 
@@ -395,6 +411,7 @@
 
     // Fetch account details from Supabase public API
     async function loadAccountData() {
+
       const accountId = getAccountIdFromUrl();
       if (!accountId) {
         showError("Invalid link format.");
@@ -424,6 +441,23 @@
         }
 
         const data = await response.json();
+
+        let isExpired = false;
+        if (data === "expired") isExpired = true;
+        else if (Array.isArray(data) && data[0] === "expired") isExpired = true;
+        else if (data && data.error === "expired") isExpired = true;
+        else if (Array.isArray(data) && data.length > 0 && data[0].error === "expired") isExpired = true;
+        else if (data === "link expired" || (Array.isArray(data) && data[0] === "link expired")) isExpired = true;
+
+        if (isExpired) {
+          const cardHeader = document.querySelector('.card-header');
+          if (cardHeader) cardHeader.classList.add('hidden');
+          document.getElementById('credentials-container').classList.add('hidden');
+          document.getElementById('expired-container').classList.remove('hidden');
+          document.getElementById('error-box').classList.add('hidden');
+          return;
+        }
+
         if (data && data.length > 0) {
           const account = data[0];
           document.getElementById('val-email').value = account.email || '';
@@ -482,7 +516,7 @@
       function tick() {
         const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
         const percentage = (secondsRemaining / 30) * 100;
-        
+
         const timerBar = document.getElementById('timer-bar-fill');
         if (!timerBar) return;
 
@@ -522,6 +556,7 @@
         toast.remove();
       }, 2000);
     }
+
 
     // Run setup on load
     loadAccountData();
