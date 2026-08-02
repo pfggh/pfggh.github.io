@@ -424,17 +424,24 @@
       }
 
       const cleanBaseUrl = SUPABASE_URL.replace(/\/$/, "");
-      const requestUrl = `${cleanBaseUrl}/rest/v1/rpc/get_account?secret_uuid=${accountId}`;
+      const requestUrl = `${cleanBaseUrl}/functions/v1/get_account`;
 
       try {
         const response = await fetch(requestUrl, {
-          method: 'GET',
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Accept-Profile': 'public'
-          }
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({ secret_uuid: accountId })
         });
+
+        if (response.status === 429) {
+          const errData = await response.json().catch(() => ({}));
+          showError(errData.error || "Too many requests. Please try again later.");
+          return;
+        }
 
         if (!response.ok) {
           throw new Error();
@@ -458,8 +465,8 @@
           return;
         }
 
-        if (data && data.length > 0) {
-          const account = data[0];
+        const account = Array.isArray(data) ? data[0] : data;
+        if (account && (account.email || account.password || account.two_factor_key)) {
           document.getElementById('val-email').value = account.email || '';
           document.getElementById('val-pass').value = account.password || '';
           accountSecret = account.two_factor_key || '';
