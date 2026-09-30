@@ -320,18 +320,8 @@
         <p>Your security credentials and 2FA key</p>
       </div>
 
-      <!-- Unlock Gate Display (Shown by default to protect against crawler/preview hits) -->
-      <div id="unlock-container" style="text-align: center; padding: 0.5rem 0 0.25rem;">
-        <div style="width: 56px; height: 56px; background: var(--primary-light); color: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-        </div>
-        <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.5rem;">Access Your Credentials</h2>
-        <p style="font-size: 0.875rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1.5rem;">
-          Click the button below to start your session and reveal your account email, password, and 2FA authentication code.
-        </p>
+      <!-- Unlock Gate Display (Shown only if link is verified active, protects against crawler/preview hits) -->
+      <div id="unlock-container" class="hidden" style="text-align: center; padding: 1.5rem 0 0.5rem;">
         <button id="btn-reveal" class="btn-get-code" onclick="handleUnlockClick()">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -339,9 +329,6 @@
           </svg>
           <span id="btn-reveal-text">See Account Details</span>
         </button>
-        <div style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.8; margin-top: 1rem;">
-          Once unlocked, this single-use link remains accessible for 10 minutes.
-        </div>
       </div>
 
       <!-- Credentials Display -->
@@ -398,19 +385,13 @@
             </div>
           </div>
         </div>
-
-        <!-- 10-Minute Grace Countdown Banner -->
-        <div id="session-banner" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:0.75rem;margin-top:1rem;font-size:0.825rem;color:#1e40af;display:flex;align-items:center;justify-content:space-between;">
-          <span><strong>Single-Use Session:</strong> Valid for <span id="session-countdown" style="font-weight:700;">10:00</span></span>
-          <span style="font-size:0.75rem;color:#3b82f6;">(Refreshing permitted)</span>
-        </div>
       </div>
 
       <!-- Expired Display -->
       <div id="expired-container" class="hidden" style="text-align: center; padding: 1rem 0;">
-        <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.75rem;">Link Expired / Burned</h2>
+        <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.75rem;">Contact Support</h2>
         <p style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">
-          For security, login links are single-use with a 10-minute grace window once unlocked. Kindly message support for reactivation.
+          login links now only work for 30 minutes per activation. kindly message us for reactivation
         </p>
         <div style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.5; margin-top: 1rem;">
           Support: 71 083 892 - 76 970 994
@@ -481,51 +462,22 @@
       return sid;
     }
 
-    let graceCountdownInterval = null;
-
-    function startGraceCountdown(remainingSeconds) {
-      if (graceCountdownInterval) clearInterval(graceCountdownInterval);
-      let sec = typeof remainingSeconds === 'number' ? remainingSeconds : 600;
-
-      const countdownEl = document.getElementById('session-countdown');
-      const updateDisplay = () => {
-        const m = Math.floor(sec / 60);
-        const s = sec % 60;
-        if (countdownEl) {
-          countdownEl.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
-        }
-        if (sec <= 0) {
-          clearInterval(graceCountdownInterval);
-          // Show expired state immediately when grace period elapses
-          const cardHeader = document.querySelector('.card-header');
-          if (cardHeader) cardHeader.classList.add('hidden');
-          document.getElementById('unlock-container').classList.add('hidden');
-          document.getElementById('credentials-container').classList.add('hidden');
-          document.getElementById('expired-container').classList.remove('hidden');
-          document.getElementById('error-box').classList.add('hidden');
-        }
-        sec--;
-      };
-
-      updateDisplay();
-      graceCountdownInterval = setInterval(updateDisplay, 1000);
-    }
-
     // Triggered explicitly when user clicks the unlock button
     async function handleUnlockClick() {
       const btn = document.getElementById('btn-reveal');
       const btnText = document.getElementById('btn-reveal-text');
       if (btn) btn.disabled = true;
-      if (btnText) btnText.textContent = "Unlocking...";
+      if (btnText) btnText.textContent = "Loading...";
 
-      await loadAccountData();
+      await loadAccountData(false);
 
       if (btn) btn.disabled = false;
       if (btnText) btnText.textContent = "See Account Details";
     }
 
-    // Fetch account details from Supabase public API
-    async function loadAccountData() {
+    // Check link status or fetch full account details
+    // When checkOnly is true, verifies whether link is active without burning the session
+    async function loadAccountData(checkOnly = false) {
       const accountId = getAccountIdFromUrl();
       if (!accountId) {
         showError("Invalid link format.");
@@ -551,7 +503,8 @@
           },
           body: JSON.stringify({ 
             secret_uuid: accountId,
-            session_id: sessionId 
+            session_id: sessionId,
+            check_only: checkOnly
           })
         });
 
@@ -584,6 +537,13 @@
           return;
         }
 
+        // If this was just a status check to verify the link is active:
+        if (checkOnly) {
+          document.getElementById('unlock-container').classList.remove('hidden');
+          document.getElementById('error-box').classList.add('hidden');
+          return;
+        }
+
         const account = Array.isArray(data) ? data[0] : data;
         if (account && (account.email || account.password || account.two_factor_key)) {
           document.getElementById('val-email').value = account.email || '';
@@ -595,9 +555,9 @@
           document.getElementById('credentials-container').classList.remove('hidden');
           document.getElementById('error-box').classList.add('hidden');
 
-          // Start 10-minute grace countdown
-          const remainingSecs = typeof account.session_remaining_seconds === 'number' ? account.session_remaining_seconds : 600;
-          startGraceCountdown(remainingSecs);
+          try {
+            sessionStorage.setItem('gpt_portal_active', 'true');
+          } catch (_) {}
 
           calculateTOTP();
           startTimerLoop();
@@ -714,37 +674,19 @@
       }, 2000);
     }
 
-    // User-action gated:
-    // Notice loadAccountData() is NOT called on load.
-    // It is ONLY triggered when the user explicitly clicks the Unlock button.
-    // However, if the user already unlocked during this session and is refreshing the page,
-    // we can check if they have an active session to automatically resume seamlessly.
+    // Initialization on DOMContentLoaded:
+    // If the session was already unlocked, load the account credentials directly.
+    // Otherwise, perform a lightweight status check (check_only=true) so the "See Account Details"
+    // button is ONLY shown if the link is actually active!
+    // If the link is expired or invalid, it immediately displays the Contact Support (expired) screen.
     window.addEventListener('DOMContentLoaded', () => {
-      const params = new URLSearchParams(window.location.search);
-      const sid = params.get('sid');
-      let localSid = null;
-      try {
-        localSid = localStorage.getItem('gpt_portal_sid');
-      } catch (_) {}
-
-      // If the user already unlocked previously in this browser session (indicated by URL sid or session flag)
       const sessionActive = sessionStorage.getItem('gpt_portal_active');
       if (sessionActive === 'true') {
-        loadAccountData();
+        loadAccountData(false);
+      } else {
+        loadAccountData(true);
       }
     });
-
-    // Helper to mark active once unlocked
-    const origLoadAccountData = loadAccountData;
-    loadAccountData = async function() {
-      await origLoadAccountData();
-      const creds = document.getElementById('credentials-container');
-      if (creds && !creds.classList.contains('hidden')) {
-        try {
-          sessionStorage.setItem('gpt_portal_active', 'true');
-        } catch (_) {}
-      }
-    };
   </script>
 </body>
 
