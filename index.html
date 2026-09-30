@@ -337,7 +337,7 @@
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
             <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
           </svg>
-          <span id="btn-reveal-text">Unlock Credentials</span>
+          <span id="btn-reveal-text">See Account Details</span>
         </button>
         <div style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.8; margin-top: 1rem;">
           Once unlocked, this single-use link remains accessible for 10 minutes.
@@ -521,7 +521,7 @@
       await loadAccountData();
 
       if (btn) btn.disabled = false;
-      if (btnText) btnText.textContent = "Unlock Credentials";
+      if (btnText) btnText.textContent = "See Account Details";
     }
 
     // Fetch account details from Supabase public API
@@ -630,16 +630,42 @@
     }
 
 
-    // Clipboard copy wrapper with toast confirmation
+    // Clipboard copy wrapper with toast confirmation & execCommand fallback
     function copyValue(elementId, label) {
       const input = document.getElementById(elementId);
       if (!input || input.value === 'Loading...' || input.value === '------' || input.value === 'INVALID KEY') return;
 
-      navigator.clipboard.writeText(input.value).then(() => {
-        showToast(`${label} copied!`);
-      }).catch(err => {
-        console.error('Copy failed', err);
-      });
+      const text = input.value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast(`${label} copied!`);
+        }).catch(() => {
+          fallbackCopy(text, label);
+        });
+      } else {
+        fallbackCopy(text, label);
+      }
+    }
+
+    function fallbackCopy(text, label) {
+      try {
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.focus();
+        temp.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(temp);
+        if (success) {
+          showToast(`${label} copied!`);
+        } else {
+          showToast(`Please manually copy ${label}`);
+        }
+      } catch (e) {
+        showToast(`Please manually copy ${label}`);
+      }
     }
 
     // 2FA Refresh Loop (Calculates remaining seconds and updates token)
