@@ -406,8 +406,8 @@
 
       <!-- Expired Display -->
       <div id="expired-container" class="hidden" style="text-align: center; padding: 1rem 0;">
-        <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.75rem;">Contact Support</h2>
-        <p style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">
+        <h2 id="expired-title" style="font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.75rem;">Contact Support</h2>
+        <p id="expired-desc" style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">
           login links now only work for 30 minutes per activation. kindly message us for reactivation
         </p>
         <div style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.5; margin-top: 1rem;">
@@ -431,10 +431,10 @@
 
     let accountSecret = ""; // Holds base32 2FA secret in memory
 
-    // Get 'id' parameter from the URL query string
+    // Get 'id' or 'secret_uuid' parameter from the URL query string
     function getAccountIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
-      return params.get('id');
+      return params.get('id') || params.get('secret_uuid');
     }
 
     // Get or initialize persistent session ID across browser contexts
@@ -537,18 +537,40 @@
 
         const data = await response.json();
 
+        let isSubExpired = false;
         let isExpired = false;
-        if (data === "expired") isExpired = true;
+
+        if (
+          data === "subscription_expired" ||
+          (data && (data.error === "subscription_expired" || data.status === "subscription_expired"))
+        ) {
+          isSubExpired = true;
+        } else if (data === "expired") isExpired = true;
         else if (Array.isArray(data) && data[0] === "expired") isExpired = true;
         else if (data && data.error === "expired") isExpired = true;
         else if (Array.isArray(data) && data.length > 0 && data[0].error === "expired") isExpired = true;
         else if (data === "link expired" || (Array.isArray(data) && data[0] === "link expired")) isExpired = true;
 
-        if (isExpired) {
+        if (isSubExpired || isExpired) {
           const cardHeader = document.querySelector('.card-header');
           if (cardHeader) cardHeader.classList.add('hidden');
           document.getElementById('unlock-container').classList.add('hidden');
           document.getElementById('credentials-container').classList.add('hidden');
+
+          const titleEl = document.getElementById('expired-title');
+          const descEl = document.getElementById('expired-desc');
+
+          if (isSubExpired) {
+            if (titleEl) titleEl.textContent = "Subscription Expired";
+            if (descEl) {
+              const dateInfo = (data && data.expiry) ? ` (${data.expiry.split("T")[0]})` : "";
+              descEl.textContent = `Your ChatGPT subscription has expired${dateInfo}. Kindly message us on WhatsApp to renew your plan.`;
+            }
+          } else {
+            if (titleEl) titleEl.textContent = "Link Expired";
+            if (descEl) descEl.textContent = "login links now only work for 30 minutes per activation. kindly message us for reactivation";
+          }
+
           document.getElementById('expired-container').classList.remove('hidden');
           document.getElementById('error-box').classList.add('hidden');
           return;
