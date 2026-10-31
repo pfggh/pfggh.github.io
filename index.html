@@ -429,7 +429,13 @@
     const SUPABASE_URL = "https://kfgswynickhywzhneltu.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_ldEJk9Wd7TNeTEW5m3-N8g_NsrcXUXc";
 
-    let accountSecret = ""; // Holds base32 2FA secret in memory
+    // 2FA state. The seed normally never reaches the browser anymore — the server
+    // sends pre-computed codes in `totpState`. `accountSecret` is only populated
+    // in the legacy fallback (old backend still returning two_factor_key).
+    let accountSecret = "";
+    let totpState = null;      // { period, codes:[{code,start,end}] } in server epoch ms
+    let clockOffsetMs = 0;     // server_time - local time at fetch, corrects device clock skew
+    let totpTimer = null;
 
     // Get 'id' or 'secret_uuid' parameter from the URL query string
     function getAccountIdFromUrl() {
@@ -584,10 +590,22 @@
         }
 
         const account = Array.isArray(data) ? data[0] : data;
-        if (account && (account.email || account.password || account.two_factor_key)) {
+        if (account && (account.email || account.password || account.totp || account.two_factor_key)) {
           document.getElementById('val-email').value = account.email || '';
           document.getElementById('val-pass').value = account.password || '';
-          accountSecret = account.two_factor_key || '';
+
+          // Preferred path: server-computed code bundle; the seed stays on the server.
+          if (account.totp && Array.isArray(account.totp.codes) && account.totp.codes.length) {
+            totpState = { period: account.totp.period || 30, codes: account.totp.codes };
+            accountSecret = "";
+            // Correct for a wrong device clock: anchor to the server's time.
+            clockOffsetMs = (Number(account.totp.server_time) || Date.now()) - Date.now();
+          } else {
+            // Legacy fallback: old backend still returns the raw seed (computed in-browser).
+            totpState = null;
+            accountSecret = account.two_factor_key || '';
+            clockOffsetMs = 0;
+          }
 
           // Display credentials, hide unlock gate and errors
           document.getElementById('unlock-container').classList.add('hidden');
@@ -598,7 +616,6 @@
             sessionStorage.setItem('gpt_portal_active', 'true');
           } catch (_) {}
 
-          calculateTOTP();
           startTimerLoop();
         } else {
           showError("Account records not found.");
@@ -608,24 +625,43 @@
       }
     }
 
-    // Generate TOTP verification code from key
-    function calculateTOTP() {
-      if (!accountSecret) {
-        document.getElementById('val-code').value = '------';
-        return;
-      }
+    // Server-synchronised "now" (ms). Uses the server clock offset so a wrong
+    // device clock can't produce a wrong/expired code.
+    function serverNow() {
+      return Date.now() + clockOffsetMs;
+    }
+
+    // Legacy fallback only: compute a code in-browser from the raw seed for a
+    // given 30s step. Returns null on failure.
+    function codeFromSeed(stepMs) {
+      if (!accountSecret || typeof OTPAuth === 'undefined') return null;
       try {
         const sanitizedSecret = accountSecret.replace(/\s+/g, '').toUpperCase();
         const totp = new OTPAuth.TOTP({
-          algorithm: 'SHA1',
-          digits: 6,
-          period: 30,
+          algorithm: 'SHA1', digits: 6, period: 30,
           secret: OTPAuth.Secret.fromBase32(sanitizedSecret)
         });
-        document.getElementById('val-code').value = totp.generate();
+        return totp.generate({ timestamp: stepMs });
       } catch (e) {
-        document.getElementById('val-code').value = 'INVALID KEY';
+        return null;
       }
+    }
+
+    // Resolve the active code + its [start,end) window for the current server time.
+    function activeCode() {
+      const now = serverNow();
+      const period = (totpState && totpState.period ? totpState.period : 30) * 1000;
+      if (totpState && totpState.codes.length) {
+        const hit = totpState.codes.find(c => now >= c.start && now < c.end);
+        if (hit) return { code: hit.code, start: hit.start, end: hit.end };
+        return null; // ran past the pre-sent window (session effectively over)
+      }
+      if (accountSecret) {
+        const start = Math.floor(now / period) * period;
+        const code = codeFromSeed(start);
+        if (code) return { code, start, end: start + period };
+      }
+      return null;
     }
 
 
@@ -667,31 +703,43 @@
       }
     }
 
-    // 2FA Refresh Loop (Calculates remaining seconds and updates token)
+    // 2FA refresh loop. Drives the displayed code and the countdown bar off the
+    // active code's real window, so rollover is exact and never desyncs — even if
+    // the tab was backgrounded (we recompute from the clock every tick, we don't
+    // count down a local variable).
     function startTimerLoop() {
+      const codeEl = document.getElementById('val-code');
+      const timerBar = document.getElementById('timer-bar-fill');
+      let lastCode = null;
+
       function tick() {
-        const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
-        const percentage = (secondsRemaining / 30) * 100;
-
-        const timerBar = document.getElementById('timer-bar-fill');
-        if (!timerBar) return;
-
-        timerBar.style.width = `${percentage}%`;
-
-        if (secondsRemaining <= 5) {
-          timerBar.style.backgroundColor = '#ef4444'; // Red
-        } else if (secondsRemaining <= 10) {
-          timerBar.style.backgroundColor = '#f59e0b'; // Amber
-        } else {
-          timerBar.style.backgroundColor = 'var(--primary)'; // Blue
+        const active = activeCode();
+        if (!active) {
+          if (codeEl) codeEl.value = '------';
+          if (timerBar) { timerBar.style.width = '0%'; }
+          return;
         }
 
-        if (secondsRemaining === 30) {
-          calculateTOTP();
+        if (active.code !== lastCode) {
+          if (codeEl) codeEl.value = active.code;
+          lastCode = active.code;
+        }
+
+        const period = active.end - active.start;
+        const msRemaining = Math.max(0, active.end - serverNow());
+        const secondsRemaining = Math.ceil(msRemaining / 1000);
+        if (timerBar) {
+          timerBar.style.width = `${(msRemaining / period) * 100}%`;
+          if (secondsRemaining <= 5) timerBar.style.backgroundColor = '#ef4444';
+          else if (secondsRemaining <= 10) timerBar.style.backgroundColor = '#f59e0b';
+          else timerBar.style.backgroundColor = 'var(--primary)';
         }
       }
+
+      if (totpTimer) clearInterval(totpTimer);
       tick();
-      setInterval(tick, 1000);
+      // 250ms keeps the bar smooth and the rollover crisp without busy-looping.
+      totpTimer = setInterval(tick, 250);
     }
 
     function showError(msg) {
