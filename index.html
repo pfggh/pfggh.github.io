@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://kfgswynickhywzhneltu.supabase.co; media-src 'self' blob: https://kfgswynickhywzhneltu.supabase.co; connect-src 'self' https://kfgswynickhywzhneltu.supabase.co wss://kfgswynickhywzhneltu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://kfgswynickhywzhneltu.supabase.co; media-src 'self' blob: https://kfgswynickhywzhneltu.supabase.co; connect-src 'self' https://kfgswynickhywzhneltu.supabase.co wss://kfgswynickhywzhneltu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'" />
   <meta name="referrer" content="no-referrer" />
   <title>Verification Portal</title>
 
@@ -28,8 +28,6 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
     rel="stylesheet">
-  <!-- OTPAuth for browser-side TOTP calculation -->
-  <script src="https://cdn.jsdelivr.net/npm/otpauth@9.1.2/dist/otpauth.umd.min.js"></script>
 
   <style>
     :root {
@@ -319,6 +317,21 @@
       border-radius: 8px;
     }
 
+    .code-input-transparent.code-fresh {
+      animation: codeFade 0.35s ease;
+    }
+
+    @keyframes codeFade {
+      from { opacity: 0.25; }
+      to { opacity: 1; }
+    }
+
+    .code-note {
+      font-size: 0.775rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
     .hidden {
       display: none !important;
     }
@@ -384,7 +397,7 @@
 
         <!-- 2FA Code Box -->
         <div class="field-group">
-          <span class="field-label">Verification Code</span>
+          <span class="field-label">Verification Code <span id="code-seconds" class="timer-text"></span></span>
           <div class="code-container">
             <div class="code-display">
               <input type="text" id="val-code" class="code-input-transparent" readonly value="------">
@@ -400,6 +413,7 @@
             <div class="timer-bar-bg">
               <div id="timer-bar-fill" class="timer-bar-fill"></div>
             </div>
+            <div id="code-note" class="code-note hidden"></div>
           </div>
         </div>
       </div>
@@ -424,23 +438,43 @@
 
   <script>
     // ==========================================
-    // CONFIGURATION: Replace with your actual keys
+    // CONFIGURATION
     // ==========================================
     const SUPABASE_URL = "https://kfgswynickhywzhneltu.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_ldEJk9Wd7TNeTEW5m3-N8g_NsrcXUXc";
 
-    // 2FA state. The seed normally never reaches the browser anymore — the server
-    // sends pre-computed codes in `totpState`. `accountSecret` is only populated
-    // in the legacy fallback (old backend still returning two_factor_key).
-    let accountSecret = "";
-    let totpState = null;      // { period, codes:[{code,start,end}] } in server epoch ms
-    let clockOffsetMs = 0;     // server_time - local time at fetch, corrects device clock skew
+    // 2FA codes are computed on the server; the seed never reaches this page.
+    // We keep a rolling buffer of upcoming codes and top it up in the background
+    // well before it runs out, so the code on screen never waits on the network.
+    const REFILL_WHEN_LEFT_MS = 120000;   // refill once less than 2 min of codes remain
+    const MIN_REFILL_GAP_MS = 20000;      // never refill more often than this after a success
+    const RETRY_MIN_MS = 3000;
+    const RETRY_MAX_MS = 30000;
+
+    let codes = [];            // [{code, start, end}] in server epoch ms, sorted, de-duplicated
+    let clockOffsetMs = 0;     // server time - device time (fixes wrong phone clocks)
+    let sessionEndMs = null;   // server-time end of this portal session (null = unknown/long)
+    let refillInFlight = false;
+    let retryDelay = RETRY_MIN_MS;
+    let nextRetryAt = 0;
+    let sessionOver = false;
+    let codesUnavailable = false; // first load returned no codes (bad/missing seed) — don't stream, show support
     let totpTimer = null;
 
     // Get 'id' or 'secret_uuid' parameter from the URL query string
     function getAccountIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
       return params.get('id') || params.get('secret_uuid');
+    }
+
+    function newSessionId() {
+      try {
+        const b = new Uint8Array(12);
+        crypto.getRandomValues(b);
+        return 'sess_' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
+      } catch (_) {
+        return 'sess_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+      }
     }
 
     // Get or initialize persistent session ID across browser contexts
@@ -452,37 +486,54 @@
       let sid = params.get('sid');
 
       if (!sid) {
-        try {
-          sid = localStorage.getItem('gpt_portal_sid');
-        } catch (_) {}
+        try { sid = localStorage.getItem('gpt_portal_sid'); } catch (_) {}
       }
-
       if (!sid) {
-        try {
-          sid = sessionStorage.getItem('gpt_portal_sid');
-        } catch (_) {}
+        try { sid = sessionStorage.getItem('gpt_portal_sid'); } catch (_) {}
       }
+      if (!sid) sid = newSessionId();
 
-      if (!sid) {
-        sid = 'sess_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
-      }
+      try { localStorage.setItem('gpt_portal_sid', sid); } catch (_) {}
+      try { sessionStorage.setItem('gpt_portal_sid', sid); } catch (_) {}
 
-      // Persist across all storages
-      try {
-        localStorage.setItem('gpt_portal_sid', sid);
-      } catch (_) {}
-      try {
-        sessionStorage.setItem('gpt_portal_sid', sid);
-      } catch (_) {}
-
-      // Keep sid in URL query param to preserve when opening in external browser
       if (!params.get('sid')) {
         params.set('sid', sid);
         const newUrl = window.location.pathname + '?' + params.toString() + window.location.hash;
         window.history.replaceState(null, '', newUrl);
       }
-
       return sid;
+    }
+
+    // One place that talks to the backend. Returns { status, data, t0, t1 }.
+    async function callPortal(extra) {
+      const accountId = getAccountIdFromUrl();
+      const requestUrl = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/get_account`;
+      const t0 = Date.now();
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(Object.assign({ secret_uuid: accountId, session_id: getSessionId() }, extra))
+      });
+      const t1 = Date.now();
+      let data = null;
+      try { data = await response.json(); } catch (_) {}
+      return { status: response.status, data, t0, t1 };
+    }
+
+    function isSubExpired(data) {
+      return data === "subscription_expired" ||
+        !!(data && (data.error === "subscription_expired" || data.status === "subscription_expired"));
+    }
+
+    function isLinkExpired(data) {
+      return data === "expired" || data === "link expired" ||
+        (Array.isArray(data) && (data[0] === "expired" || data[0] === "link expired" || (data[0] && data[0].error === "expired"))) ||
+        !!(data && !Array.isArray(data) && data.error === "expired");
     }
 
     // Triggered explicitly when user clicks the unlock button
@@ -501,86 +552,22 @@
     // Check link status or fetch full account details
     // When checkOnly is true, verifies whether link is active without burning the session
     async function loadAccountData(checkOnly = false) {
-      const accountId = getAccountIdFromUrl();
-      if (!accountId) {
+      if (!getAccountIdFromUrl()) {
         showError("Invalid link format.");
         return;
       }
 
-      if (SUPABASE_URL === "YOUR_SUPABASE_URL" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY") {
-        showError("Portal configuration incomplete.");
-        return;
-      }
-
-      const cleanBaseUrl = SUPABASE_URL.replace(/\/$/, "");
-      const requestUrl = `${cleanBaseUrl}/functions/v1/get_account`;
-      const sessionId = getSessionId();
-
       try {
-        const response = await fetch(requestUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-          },
-          body: JSON.stringify({ 
-            secret_uuid: accountId,
-            session_id: sessionId,
-            check_only: checkOnly
-          })
-        });
+        const { status, data, t0, t1 } = await callPortal({ check_only: checkOnly });
 
-        if (response.status === 429) {
-          const errData = await response.json().catch(() => ({}));
-          showError(errData.error || "Too many requests. Please try again later.");
+        if (status === 429) {
+          showError((data && data.error) || "Too many requests. Please try again later.");
           return;
         }
+        if (status < 200 || status >= 300) throw new Error();
 
-        if (!response.ok) {
-          throw new Error();
-        }
-
-        const data = await response.json();
-
-        let isSubExpired = false;
-        let isExpired = false;
-
-        if (
-          data === "subscription_expired" ||
-          (data && (data.error === "subscription_expired" || data.status === "subscription_expired"))
-        ) {
-          isSubExpired = true;
-        } else if (data === "expired") isExpired = true;
-        else if (Array.isArray(data) && data[0] === "expired") isExpired = true;
-        else if (data && data.error === "expired") isExpired = true;
-        else if (Array.isArray(data) && data.length > 0 && data[0].error === "expired") isExpired = true;
-        else if (data === "link expired" || (Array.isArray(data) && data[0] === "link expired")) isExpired = true;
-
-        if (isSubExpired || isExpired) {
-          const cardHeader = document.querySelector('.card-header');
-          if (cardHeader) cardHeader.classList.add('hidden');
-          document.getElementById('unlock-container').classList.add('hidden');
-          document.getElementById('credentials-container').classList.add('hidden');
-
-          const titleEl = document.getElementById('expired-title');
-          const descEl = document.getElementById('expired-desc');
-
-          if (isSubExpired) {
-            if (titleEl) titleEl.textContent = "Subscription Expired";
-            if (descEl) {
-              const dateInfo = (data && data.expiry) ? ` (${data.expiry.split("T")[0]})` : "";
-              descEl.textContent = `Your ChatGPT subscription has expired${dateInfo}. Kindly message us on WhatsApp to renew your plan.`;
-            }
-          } else {
-            if (titleEl) titleEl.textContent = "Link Expired";
-            if (descEl) descEl.textContent = "login links now only work for 30 minutes per activation. kindly message us for reactivation";
-          }
-
-          document.getElementById('expired-container').classList.remove('hidden');
-          document.getElementById('error-box').classList.add('hidden');
-          return;
-        }
+        if (isSubExpired(data)) { showExpired(true, data); return; }
+        if (isLinkExpired(data)) { showExpired(false); return; }
 
         // If this was just a status check to verify the link is active:
         if (checkOnly) {
@@ -590,32 +577,24 @@
         }
 
         const account = Array.isArray(data) ? data[0] : data;
-        if (account && (account.email || account.password || account.totp || account.two_factor_key)) {
+        if (account && (account.email || account.password || account.totp)) {
           document.getElementById('val-email').value = account.email || '';
           document.getElementById('val-pass').value = account.password || '';
-
-          // Preferred path: server-computed code bundle; the seed stays on the server.
-          if (account.totp && Array.isArray(account.totp.codes) && account.totp.codes.length) {
-            totpState = { period: account.totp.period || 30, codes: account.totp.codes };
-            accountSecret = "";
-            // Correct for a wrong device clock: anchor to the server's time.
-            clockOffsetMs = (Number(account.totp.server_time) || Date.now()) - Date.now();
-          } else {
-            // Legacy fallback: old backend still returns the raw seed (computed in-browser).
-            totpState = null;
-            accountSecret = account.two_factor_key || '';
-            clockOffsetMs = 0;
-          }
 
           // Display credentials, hide unlock gate and errors
           document.getElementById('unlock-container').classList.add('hidden');
           document.getElementById('credentials-container').classList.remove('hidden');
           document.getElementById('error-box').classList.add('hidden');
 
-          try {
-            sessionStorage.setItem('gpt_portal_active', 'true');
-          } catch (_) {}
+          try { sessionStorage.setItem('gpt_portal_active', 'true'); } catch (_) {}
 
+          sessionOver = false;
+          codes = [];
+          applyBundle(account.totp, account.session_remaining_seconds, t0, t1);
+          // No codes on the very first load means the stored seed is missing/invalid —
+          // that won't fix itself, so show support and don't spin the refresh loop.
+          codesUnavailable = !codes.length;
+          if (codesUnavailable) setCodeNote("Verification code unavailable. Please contact support.");
           startTimerLoop();
         } else {
           showError("Account records not found.");
@@ -625,50 +604,186 @@
       }
     }
 
-    // Server-synchronised "now" (ms). Uses the server clock offset so a wrong
-    // device clock can't produce a wrong/expired code.
+    // Merge a server bundle into the rolling buffer and re-sync the clock.
+    function applyBundle(totp, remainingSeconds, t0, t1) {
+      if (!totp || !Array.isArray(totp.codes) || !totp.codes.length) return;
+
+      // Clock: assume the server stamped server_time halfway through the request.
+      const serverTime = Number(totp.server_time);
+      if (Number.isFinite(serverTime)) clockOffsetMs = serverTime - Math.round((t0 + t1) / 2);
+
+      const rem = Number(remainingSeconds);
+      // Anything over a day is a long-lived link: no client-side end, just keep streaming.
+      sessionEndMs = Number.isFinite(rem) && rem > 0 && rem < 86400 ? serverNow() + rem * 1000 : null;
+
+      const now = serverNow();
+      const byStart = new Map();
+      for (const c of codes.concat(totp.codes)) {
+        const start = Number(c.start), end = Number(c.end);
+        if (typeof c.code !== 'string' || !/^\d{6}$/.test(c.code)) continue;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= now) continue;
+        byStart.set(start, { code: c.code, start, end });
+      }
+      codes = Array.from(byStart.values()).sort((a, b) => a.start - b.start);
+    }
+
     function serverNow() {
       return Date.now() + clockOffsetMs;
     }
 
-    // Legacy fallback only: compute a code in-browser from the raw seed for a
-    // given 30s step. Returns null on failure.
-    function codeFromSeed(stepMs) {
-      if (!accountSecret || typeof OTPAuth === 'undefined') return null;
-      try {
-        const sanitizedSecret = accountSecret.replace(/\s+/g, '').toUpperCase();
-        const totp = new OTPAuth.TOTP({
-          algorithm: 'SHA1', digits: 6, period: 30,
-          secret: OTPAuth.Secret.fromBase32(sanitizedSecret)
-        });
-        return totp.generate({ timestamp: stepMs });
-      } catch (e) {
-        return null;
-      }
-    }
-
-    // Resolve the active code + its [start,end) window for the current server time.
     function activeCode() {
       const now = serverNow();
-      const period = (totpState && totpState.period ? totpState.period : 30) * 1000;
-      if (totpState && totpState.codes.length) {
-        const hit = totpState.codes.find(c => now >= c.start && now < c.end);
-        if (hit) return { code: hit.code, start: hit.start, end: hit.end };
-        return null; // ran past the pre-sent window (session effectively over)
-      }
-      if (accountSecret) {
-        const start = Math.floor(now / period) * period;
-        const code = codeFromSeed(start);
-        if (code) return { code, start, end: start + period };
+      for (const c of codes) {
+        if (now >= c.start && now < c.end) return c;
       }
       return null;
     }
 
+    function bufferLeftMs() {
+      return codes.length ? codes[codes.length - 1].end - serverNow() : 0;
+    }
+
+    // Top up only if the buffer is getting short AND it doesn't already reach the session end.
+    function needsRefill() {
+      if (sessionOver || codesUnavailable) return false;
+      if (bufferLeftMs() >= REFILL_WHEN_LEFT_MS) return false;
+      if (sessionEndMs !== null && codes.length && codes[codes.length - 1].end >= sessionEndMs) return false;
+      return true;
+    }
+
+    // Background top-up. Never blocks the display; one request at a time; backs off on failure.
+    async function refillCodes() {
+      if (refillInFlight || sessionOver) return;
+      if (Date.now() < nextRetryAt) return;
+      refillInFlight = true;
+      try {
+        const { status, data, t0, t1 } = await callPortal({ totp_refresh: true });
+        if (isSubExpired(data) || isLinkExpired(data)) {
+          endSession(isSubExpired(data), data);
+          return;
+        }
+        if (status >= 200 && status < 300 && data && data.totp) {
+          applyBundle(data.totp, data.session_remaining_seconds, t0, t1);
+          retryDelay = RETRY_MIN_MS;
+          nextRetryAt = Date.now() + MIN_REFILL_GAP_MS;
+          setCodeNote("");
+          return;
+        }
+        throw new Error("refresh failed");
+      } catch (_) {
+        nextRetryAt = Date.now() + retryDelay;
+        retryDelay = Math.min(RETRY_MAX_MS, retryDelay * 2);
+      } finally {
+        refillInFlight = false;
+      }
+    }
+
+    // The session ended. Keep any code that's still valid, then switch to the expired screen.
+    function endSession(subExpired, data) {
+      sessionOver = true;
+      const sessionDone = () => showExpired(subExpired, data);
+      const active = activeCode();
+      if (active) {
+        setTimeout(sessionDone, Math.max(0, active.end - serverNow()));
+      } else {
+        sessionDone();
+      }
+    }
+
+    // Drives the code, countdown bar and seconds label off the real code window,
+    // recomputed from the clock every tick, so a backgrounded tab can never drift.
+    function startTimerLoop() {
+      const codeEl = document.getElementById('val-code');
+      const timerBar = document.getElementById('timer-bar-fill');
+      const secsEl = document.getElementById('code-seconds');
+      let lastCode = null;
+
+      function tick() {
+        const now = serverNow();
+
+        if (!sessionOver && sessionEndMs !== null && now >= sessionEndMs) {
+          endSession(false);
+        }
+        if (needsRefill()) refillCodes();
+
+        const active = activeCode();
+        if (!active) {
+          if (codeEl && codeEl.value !== '------') codeEl.value = '------';
+          if (timerBar) timerBar.style.width = '0%';
+          if (secsEl) secsEl.textContent = '';
+          lastCode = null;
+          if (codes.length === 0 && !sessionOver && !codesUnavailable && refillInFlight) setCodeNote("Refreshing code…");
+          return;
+        }
+
+        if (active.code !== lastCode) {
+          if (codeEl) {
+            codeEl.value = active.code;
+            codeEl.classList.remove('code-fresh');
+            void codeEl.offsetWidth; // restart the fade-in
+            codeEl.classList.add('code-fresh');
+          }
+          lastCode = active.code;
+        }
+
+        const period = active.end - active.start;
+        const msRemaining = Math.max(0, active.end - now);
+        const secondsRemaining = Math.ceil(msRemaining / 1000);
+        if (secsEl) secsEl.textContent = `${secondsRemaining}s`;
+        if (timerBar) {
+          timerBar.style.width = `${(msRemaining / period) * 100}%`;
+          if (secondsRemaining <= 5) timerBar.style.backgroundColor = '#ef4444';
+          else if (secondsRemaining <= 10) timerBar.style.backgroundColor = '#f59e0b';
+          else timerBar.style.backgroundColor = 'var(--primary)';
+        }
+      }
+
+      if (totpTimer) clearInterval(totpTimer);
+      tick();
+      totpTimer = setInterval(tick, 250);
+      startTimerLoop.tick = tick;
+    }
+
+    function setCodeNote(msg) {
+      const el = document.getElementById('code-note');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.classList.toggle('hidden', !msg);
+    }
+
+    function showExpired(subExpired, data) {
+      if (totpTimer) { clearInterval(totpTimer); totpTimer = null; }
+      sessionOver = true;
+      codes = [];
+      try { sessionStorage.removeItem('gpt_portal_active'); } catch (_) {}
+
+      const cardHeader = document.querySelector('.card-header');
+      if (cardHeader) cardHeader.classList.add('hidden');
+      document.getElementById('unlock-container').classList.add('hidden');
+      document.getElementById('credentials-container').classList.add('hidden');
+
+      const titleEl = document.getElementById('expired-title');
+      const descEl = document.getElementById('expired-desc');
+
+      if (subExpired) {
+        if (titleEl) titleEl.textContent = "Subscription Expired";
+        if (descEl) {
+          const dateInfo = (data && data.expiry) ? ` (${String(data.expiry).split("T")[0]})` : "";
+          descEl.textContent = `Your ChatGPT subscription has expired${dateInfo}. Kindly message us on WhatsApp to renew your plan.`;
+        }
+      } else {
+        if (titleEl) titleEl.textContent = "Link Expired";
+        if (descEl) descEl.textContent = "login links now only work for 30 minutes per activation. kindly message us for reactivation";
+      }
+
+      document.getElementById('expired-container').classList.remove('hidden');
+      document.getElementById('error-box').classList.add('hidden');
+    }
 
     // Clipboard copy wrapper with toast confirmation & execCommand fallback
     function copyValue(elementId, label) {
       const input = document.getElementById(elementId);
-      if (!input || input.value === 'Loading...' || input.value === '------' || input.value === 'INVALID KEY') return;
+      if (!input || input.value === 'Loading...' || input.value === '------') return;
 
       const text = input.value;
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -693,53 +808,10 @@
         temp.select();
         const success = document.execCommand('copy');
         document.body.removeChild(temp);
-        if (success) {
-          showToast(`${label} copied!`);
-        } else {
-          showToast(`Please manually copy ${label}`);
-        }
+        showToast(success ? `${label} copied!` : `Please manually copy ${label}`);
       } catch (e) {
         showToast(`Please manually copy ${label}`);
       }
-    }
-
-    // 2FA refresh loop. Drives the displayed code and the countdown bar off the
-    // active code's real window, so rollover is exact and never desyncs — even if
-    // the tab was backgrounded (we recompute from the clock every tick, we don't
-    // count down a local variable).
-    function startTimerLoop() {
-      const codeEl = document.getElementById('val-code');
-      const timerBar = document.getElementById('timer-bar-fill');
-      let lastCode = null;
-
-      function tick() {
-        const active = activeCode();
-        if (!active) {
-          if (codeEl) codeEl.value = '------';
-          if (timerBar) { timerBar.style.width = '0%'; }
-          return;
-        }
-
-        if (active.code !== lastCode) {
-          if (codeEl) codeEl.value = active.code;
-          lastCode = active.code;
-        }
-
-        const period = active.end - active.start;
-        const msRemaining = Math.max(0, active.end - serverNow());
-        const secondsRemaining = Math.ceil(msRemaining / 1000);
-        if (timerBar) {
-          timerBar.style.width = `${(msRemaining / period) * 100}%`;
-          if (secondsRemaining <= 5) timerBar.style.backgroundColor = '#ef4444';
-          else if (secondsRemaining <= 10) timerBar.style.backgroundColor = '#f59e0b';
-          else timerBar.style.backgroundColor = 'var(--primary)';
-        }
-      }
-
-      if (totpTimer) clearInterval(totpTimer);
-      tick();
-      // 250ms keeps the bar smooth and the rollover crisp without busy-looping.
-      totpTimer = setInterval(tick, 250);
     }
 
     function showError(msg) {
@@ -755,11 +827,15 @@
       toast.className = 'toast';
       toast.textContent = msg;
       container.appendChild(toast);
-
-      setTimeout(() => {
-        toast.remove();
-      }, 2000);
+      setTimeout(() => { toast.remove(); }, 2000);
     }
+
+    // Returning to a backgrounded tab: redraw now and top up immediately if needed.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || !startTimerLoop.tick || sessionOver) return;
+      nextRetryAt = 0;
+      startTimerLoop.tick();
+    });
 
     // Initialization on DOMContentLoaded:
     // If the session was already unlocked, load the account credentials directly.
@@ -768,12 +844,9 @@
     // If the link is expired or invalid, it immediately displays the Contact Support (expired) screen.
     window.addEventListener('DOMContentLoaded', () => {
       if (window.__FRAMED__) return;
-      const sessionActive = sessionStorage.getItem('gpt_portal_active');
-      if (sessionActive === 'true') {
-        loadAccountData(false);
-      } else {
-        loadAccountData(true);
-      }
+      let sessionActive = null;
+      try { sessionActive = sessionStorage.getItem('gpt_portal_active'); } catch (_) {}
+      loadAccountData(sessionActive !== 'true');
     });
   </script>
 </body>
