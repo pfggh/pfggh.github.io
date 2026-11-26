@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://kfgswynickhywzhneltu.supabase.co; media-src 'self' blob: https://kfgswynickhywzhneltu.supabase.co; connect-src 'self' https://kfgswynickhywzhneltu.supabase.co wss://kfgswynickhywzhneltu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Verification Portal</title>
+
+  <!-- Clickjacking guard: GitHub Pages cannot send X-Frame-Options / frame-ancestors headers,
+       so refuse to run when the page is embedded in a frame on another site. -->
+  <script>
+    window.__FRAMED__ = false;
+    try {
+      if (window.top !== window.self) {
+        window.__FRAMED__ = true;
+        document.documentElement.style.display = "none";
+        try { window.top.location = window.self.location.href; } catch (e) {}
+      }
+    } catch (e) {
+      window.__FRAMED__ = true;
+    }
+  </script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      background-color: var(--bg);
+      background-image: radial-gradient(circle at top right, rgba(37, 99, 235, 0.04), transparent 400px);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+      padding: 2.25rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .card-header {
+      text-align: center;
+      margin-bottom: 0.25rem;
+    }
+
+    .card-header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 0.25rem;
+      letter-spacing: -0.01em;
+    }
+
+    .card-header p {
+      font-size: 0.825rem;
+      color: var(--text-muted);
+    }
+
+    /* Input/Copy Box Styles */
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .field-label {
+      font-size: 0.775rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .timer-text {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .input-box {
+      display: flex;
+      align-items: center;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .input-box:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .field-value {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      padding: 0.875rem 1rem;
+      font-family: monospace;
+      font-size: 0.95rem;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .code-container {
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .code-display {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .code-input-transparent {
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--primary);
+      width: 100%;
+      padding: 0;
+    }
+
+    .btn-copy-icon {
+      background: var(--primary-light);
+      color: var(--primary);
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .btn-copy-icon:hover {
+      background: var(--primary);
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .btn-copy-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .timer-bar-bg {
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 3px;
+      overflow: hidden;
+      width: 100%;
+    }
+
+    .timer-bar-fill {
+      height: 100%;
+      width: 100%;
+      background: var(--primary);
+      transition: width 1s linear, background-color 0.3s ease;
+    }
+
+    .btn-copy {
+      border: none;
+      outline: none;
+      background: var(--border);
+      color: var(--text);
+      padding: 0.875rem 1.25rem;
+      font-family: inherit;
+      font-size: 0.825rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s ease;
+      border-left: 1px solid var(--border);
+    }
+
+    .btn-copy:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .btn-copy.btn-primary-copy {
+      background: var(--primary);
+      color: #ffffff;
+      border-left: none;
+    }
+
+    .btn-copy.btn-primary-copy:hover {
+      background: var(--primary-hover);
+      color: #ffffff;
+    }
+
+    .btn-copy svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .btn-get-code {
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary), #4f46e5);
+      color: white;
+      border: none;
+      padding: 1rem;
+      border-radius: 12px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+    }
+
+    .btn-get-code:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
+    }
+
+    /* Toast styling */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+    }
+
+    .toast {
+      background: #0f172a;
+      color: white;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.825rem;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateY(20px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .error-msg {
+      color: #ef4444;
+      font-size: 0.825rem;
+      text-align: center;
+      padding: 0.5rem;
+      background: #fef2f2;
+      border: 1px solid rgba(239, 68, 68, 0.15);
+      border-radius: 8px;
+    }
+
+    .code-input-transparent.code-fresh {
+      animation: codeFade 0.35s ease;
+    }
+
+    @keyframes codeFade {
+      from { opacity: 0.25; }
+      to { opacity: 1; }
+    }
+
+    .code-note {
+      font-size: 0.775rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <div class="card">
+      <div style="text-align: center; margin-bottom: -0.5rem;">
+        <img src="logo.svg" alt="Teshrij Logo" style="height: 48px; object-fit: contain;">
+      </div>
+      <div class="card-header">
+        <h1>Access Portal</h1>
+        <p>Your security credentials and 2FA key</p>
+      </div>
+
+      <!-- Unlock Gate Display (Shown only if link is verified active, protects against crawler/preview hits) -->
+      <div id="unlock-container" class="hidden" style="text-align: center; padding: 1.5rem 0 0.5rem;">
+        <button id="btn-reveal" class="btn-get-code" onclick="handleUnlockClick()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+          </svg>
+          <span id="btn-reveal-text">See Account Details</span>
+        </button>
+      </div>
+
+      <!-- Credentials Display -->
+      <div id="credentials-container" class="hidden">
+        <!-- Email Box -->
+        <div class="field-group" style="margin-bottom: 1rem;">
+          <span class="field-label">email</span>
+          <div class="input-box">
+            <input type="text" id="val-email" class="field-value" readonly value="Loading...">
+            <button class="btn-copy" onclick="copyValue('val-email', 'Email')">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              Copy
+            </button>
+          </div>
+        </div>
+
+        <!-- Password Box -->
+        <div class="field-group" style="margin-bottom: 1rem;">
+          <span class="field-label">pass</span>
+          <div class="input-box">
+            <input type="text" id="val-pass" class="field-value" readonly value="Loading...">
+            <button class="btn-copy" onclick="copyValue('val-pass', 'Password')">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              Copy
+            </button>
+          </div>
+        </div>
+
+        <!-- 2FA Code Box -->
+        <div class="field-group">
+          <span class="field-label">Verification Code <span id="code-seconds" class="timer-text"></span></span>
+          <div class="code-container">
+            <div class="code-display">
+              <input type="text" id="val-code" class="code-input-transparent" readonly value="------">
+              <button class="btn-copy-icon" onclick="copyValue('val-code', 'Code')" title="Copy Code">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              </button>
+            </div>
+            <!-- Timer Bar -->
+            <div class="timer-bar-bg">
+              <div id="timer-bar-fill" class="timer-bar-fill"></div>
+            </div>
+            <div id="code-note" class="code-note hidden"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expired Display -->
+      <div id="expired-container" class="hidden" style="text-align: center; padding: 1rem 0;">
+        <h2 id="expired-title" style="font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.75rem;">Contact Support</h2>
+        <p id="expired-desc" style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">
+          login links now only work for 30 minutes per activation. kindly message us for reactivation
+        </p>
+        <div style="font-size: 0.75rem; color: var(--text-muted); opacity: 0.5; margin-top: 1rem;">
+          Support: 71 083 892 - 76 970 994
+        </div>
+      </div>
+
+      <div id="error-box" class="error-msg hidden">Loading credentials...</div>
+    </div>
+  </div>
+
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script>
+    // ==========================================
+    // CONFIGURATION
+    // ==========================================
+    const SUPABASE_URL = "https://kfgswynickhywzhneltu.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_ldEJk9Wd7TNeTEW5m3-N8g_NsrcXUXc";
+
+    // 2FA codes are computed on the server; the seed never reaches this page.
+    // We keep a rolling buffer of upcoming codes and top it up in the background
+    // well before it runs out, so the code on screen never waits on the network.
+    const REFILL_WHEN_LEFT_MS = 120000;   // refill once less than 2 min of codes remain
+    const MIN_REFILL_GAP_MS = 20000;      // never refill more often than this after a success
+    const RETRY_MIN_MS = 3000;
+    const RETRY_MAX_MS = 30000;
+
+    let codes = [];            // [{code, start, end}] in server epoch ms, sorted, de-duplicated
+    let clockOffsetMs = 0;     // server time - device time (fixes wrong phone clocks)
+    let sessionEndMs = null;   // server-time end of this portal session (null = unknown/long)
+    let refillInFlight = false;
+    let retryDelay = RETRY_MIN_MS;
+    let nextRetryAt = 0;
+    let sessionOver = false;
+    let codesUnavailable = false; // first load returned no codes (bad/missing seed) — don't stream, show support
+    let totpTimer = null;
+
+    // Get 'id' or 'secret_uuid' parameter from the URL query string
+    function getAccountIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('id') || params.get('secret_uuid');
+    }
+
+    function newSessionId() {
+      try {
+        const b = new Uint8Array(12);
+        crypto.getRandomValues(b);
+        return 'sess_' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
+      } catch (_) {
+        return 'sess_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+      }
+    }
+
+    // Get or initialize persistent session ID across browser contexts
+    // Checks query param 'sid', then localStorage, then sessionStorage.
+    // Automatically appends 'sid' to the current browser URL so in-app browsers
+    // (WhatsApp/Telegram) preserve the session ID when opened externally in Safari/Chrome.
+    function getSessionId() {
+      const params = new URLSearchParams(window.location.search);
+      let sid = params.get('sid');
+
+      if (!sid) {
+        try { sid = localStorage.getItem('gpt_portal_sid'); } catch (_) {}
+      }
+      if (!sid) {
+        try { sid = sessionStorage.getItem('gpt_portal_sid'); } catch (_) {}
+      }
+      if (!sid) sid = newSessionId();
+
+      try { localStorage.setItem('gpt_portal_sid', sid); } catch (_) {}
+      try { sessionStorage.setItem('gpt_portal_sid', sid); } catch (_) {}
+
+      if (!params.get('sid')) {
+        params.set('sid', sid);
+        const newUrl = window.location.pathname + '?' + params.toString() + window.location.hash;
+        window.history.replaceState(null, '', newUrl);
+      }
+      return sid;
+    }
+
+    // One place that talks to the backend. Returns { status, data, t0, t1 }.
+    async function callPortal(extra) {
+      const accountId = getAccountIdFromUrl();
+      const requestUrl = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/get_account`;
+      const t0 = Date.now();
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(Object.assign({ secret_uuid: accountId, session_id: getSessionId() }, extra))
+      });
+      const t1 = Date.now();
+      let data = null;
+      try { data = await response.json(); } catch (_) {}
+      return { status: response.status, data, t0, t1 };
+    }
+
+    function isSubExpired(data) {
+      return data === "subscription_expired" ||
+        !!(data && (data.error === "subscription_expired" || data.status === "subscription_expired"));
+    }
+
+    function isLinkExpired(data) {
+      return data === "expired" || data === "link expired" ||
+        (Array.isArray(data) && (data[0] === "expired" || data[0] === "link expired" || (data[0] && data[0].error === "expired"))) ||
+        !!(data && !Array.isArray(data) && data.error === "expired");
+    }
+
+    // Triggered explicitly when user clicks the unlock button
+    async function handleUnlockClick() {
+      const btn = document.getElementById('btn-reveal');
+      const btnText = document.getElementById('btn-reveal-text');
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.textContent = "Loading...";
+
+      await loadAccountData(false);
+
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.textContent = "See Account Details";
+    }
+
+    // Check link status or fetch full account details
+    // When checkOnly is true, verifies whether link is active without burning the session
+    async function loadAccountData(checkOnly = false) {
+      if (!getAccountIdFromUrl()) {
+        showError("Invalid link format.");
+        return;
+      }
+
+      try {
+        const { status, data, t0, t1 } = await callPortal({ check_only: checkOnly });
+
+        if (status === 429) {
+          showError((data && data.error) || "Too many requests. Please try again later.");
+          return;
+        }
+        if (status < 200 || status >= 300) throw new Error();
+
+        if (isSubExpired(data)) { showExpired(true, data); return; }
+        if (isLinkExpired(data)) { showExpired(false); return; }
+
+        // If this was just a status check to verify the link is active:
+        if (checkOnly) {
+          document.getElementById('unlock-container').classList.remove('hidden');
+          document.getElementById('error-box').classList.add('hidden');
+          return;
+        }
+
+        const account = Array.isArray(data) ? data[0] : data;
+        if (account && (account.email || account.password || account.totp)) {
+          document.getElementById('val-email').value = account.email || '';
+          document.getElementById('val-pass').value = account.password || '';
+
+          // Display credentials, hide unlock gate and errors
+          document.getElementById('unlock-container').classList.add('hidden');
+          document.getElementById('credentials-container').classList.remove('hidden');
+          document.getElementById('error-box').classList.add('hidden');
+
+          try { sessionStorage.setItem('gpt_portal_active', 'true'); } catch (_) {}
+
+          sessionOver = false;
+          codes = [];
+          applyBundle(account.totp, account.session_remaining_seconds, t0, t1);
+          // No codes on the very first load means the stored seed is missing/invalid —
+          // that won't fix itself, so show support and don't spin the refresh loop.
+          codesUnavailable = !codes.length;
+          if (codesUnavailable) setCodeNote("Verification code unavailable. Please contact support.");
+          startTimerLoop();
+        } else {
+          showError("Account records not found.");
+        }
+      } catch (err) {
+        showError("Failed to fetch access portal.");
+      }
+    }
+
+    // Merge a server bundle into the rolling buffer and re-sync the clock.
+    function applyBundle(totp, remainingSeconds, t0, t1) {
+      if (!totp || !Array.isArray(totp.codes) || !totp.codes.length) return;
+
+      // Clock: assume the server stamped server_time halfway through the request.
+      const serverTime = Number(totp.server_time);
+      if (Number.isFinite(serverTime)) clockOffsetMs = serverTime - Math.round((t0 + t1) / 2);
+
+      const rem = Number(remainingSeconds);
+      // Anything over a day is a long-lived link: no client-side end, just keep streaming.
+      sessionEndMs = Number.isFinite(rem) && rem > 0 && rem < 86400 ? serverNow() + rem * 1000 : null;
+
+      const now = serverNow();
+      const byStart = new Map();
+      for (const c of codes.concat(totp.codes)) {
+        const start = Number(c.start), end = Number(c.end);
+        if (typeof c.code !== 'string' || !/^\d{6}$/.test(c.code)) continue;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= now) continue;
+        byStart.set(start, { code: c.code, start, end });
+      }
+      codes = Array.from(byStart.values()).sort((a, b) => a.start - b.start);
+    }
+
+    function serverNow() {
+      return Date.now() + clockOffsetMs;
+    }
+
+    function activeCode() {
+      const now = serverNow();
+      for (const c of codes) {
+        if (now >= c.start && now < c.end) return c;
+      }
+      return null;
+    }
+
+    function bufferLeftMs() {
+      return codes.length ? codes[codes.length - 1].end - serverNow() : 0;
+    }
+
+    // Top up only if the buffer is getting short AND it doesn't already reach the session end.
+    function needsRefill() {
+      if (sessionOver || codesUnavailable) return false;
+      if (bufferLeftMs() >= REFILL_WHEN_LEFT_MS) return false;
+      if (sessionEndMs !== null && codes.length && codes[codes.length - 1].end >= sessionEndMs) return false;
+      return true;
+    }
+
+    // Background top-up. Never blocks the display; one request at a time; backs off on failure.
+    async function refillCodes() {
+      if (refillInFlight || sessionOver) return;
+      if (Date.now() < nextRetryAt) return;
+      refillInFlight = true;
+      try {
+        const { status, data, t0, t1 } = await callPortal({ totp_refresh: true });
+        if (isSubExpired(data) || isLinkExpired(data)) {
+          endSession(isSubExpired(data), data);
+          return;
+        }
+        if (status >= 200 && status < 300 && data && data.totp) {
+          applyBundle(data.totp, data.session_remaining_seconds, t0, t1);
+          retryDelay = RETRY_MIN_MS;
+          nextRetryAt = Date.now() + MIN_REFILL_GAP_MS;
+          setCodeNote("");
+          return;
+        }
+        throw new Error("refresh failed");
+      } catch (_) {
+        nextRetryAt = Date.now() + retryDelay;
+        retryDelay = Math.min(RETRY_MAX_MS, retryDelay * 2);
+      } finally {
+        refillInFlight = false;
+      }
+    }
+
+    // The session ended. Keep any code that's still valid, then switch to the expired screen.
+    function endSession(subExpired, data) {
+      sessionOver = true;
+      const sessionDone = () => showExpired(subExpired, data);
+      const active = activeCode();
+      if (active) {
+        setTimeout(sessionDone, Math.max(0, active.end - serverNow()));
+      } else {
+        sessionDone();
+      }
+    }
+
+    // Drives the code, countdown bar and seconds label off the real code window,
+    // recomputed from the clock every tick, so a backgrounded tab can never drift.
+    function startTimerLoop() {
+      const codeEl = document.getElementById('val-code');
+      const timerBar = document.getElementById('timer-bar-fill');
+      const secsEl = document.getElementById('code-seconds');
+      let lastCode = null;
+
+      function tick() {
+        const now = serverNow();
+
+        if (!sessionOver && sessionEndMs !== null && now >= sessionEndMs) {
+          endSession(false);
+        }
+        if (needsRefill()) refillCodes();
+
+        const active = activeCode();
+        if (!active) {
+          if (codeEl && codeEl.value !== '------') codeEl.value = '------';
+          if (timerBar) timerBar.style.width = '0%';
+          if (secsEl) secsEl.textContent = '';
+          lastCode = null;
+          if (codes.length === 0 && !sessionOver && !codesUnavailable && refillInFlight) setCodeNote("Refreshing code…");
+          return;
+        }
+
+        if (active.code !== lastCode) {
+          if (codeEl) {
+            codeEl.value = active.code;
+            codeEl.classList.remove('code-fresh');
+            void codeEl.offsetWidth; // restart the fade-in
+            codeEl.classList.add('code-fresh');
+          }
+          lastCode = active.code;
+        }
+
+        const period = active.end - active.start;
+        const msRemaining = Math.max(0, active.end - now);
+        const secondsRemaining = Math.ceil(msRemaining / 1000);
+        if (secsEl) secsEl.textContent = `${secondsRemaining}s`;
+        if (timerBar) {
+          timerBar.style.width = `${(msRemaining / period) * 100}%`;
+          if (secondsRemaining <= 5) timerBar.style.backgroundColor = '#ef4444';
+          else if (secondsRemaining <= 10) timerBar.style.backgroundColor = '#f59e0b';
+          else timerBar.style.backgroundColor = 'var(--primary)';
+        }
+      }
+
+      if (totpTimer) clearInterval(totpTimer);
+      tick();
+      totpTimer = setInterval(tick, 250);
+      startTimerLoop.tick = tick;
+    }
+
+    function setCodeNote(msg) {
+      const el = document.getElementById('code-note');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.classList.toggle('hidden', !msg);
+    }
+
+    function showExpired(subExpired, data) {
+      if (totpTimer) { clearInterval(totpTimer); totpTimer = null; }
+      sessionOver = true;
+      codes = [];
+      try { sessionStorage.removeItem('gpt_portal_active'); } catch (_) {}
+
+      const cardHeader = document.querySelector('.card-header');
+      if (cardHeader) cardHeader.classList.add('hidden');
+      document.getElementById('unlock-container').classList.add('hidden');
+      document.getElementById('credentials-container').classList.add('hidden');
+
+      const titleEl = document.getElementById('expired-title');
+      const descEl = document.getElementById('expired-desc');
+
+      if (subExpired) {
+        if (titleEl) titleEl.textContent = "Subscription Expired";
+        if (descEl) {
+          const dateInfo = (data && data.expiry) ? ` (${String(data.expiry).split("T")[0]})` : "";
+          descEl.textContent = `Your ChatGPT subscription has expired${dateInfo}. Kindly message us on WhatsApp to renew your plan.`;
+        }
+      } else {
+        if (titleEl) titleEl.textContent = "Link Expired";
+        if (descEl) descEl.textContent = "login links now only work for 30 minutes per activation. kindly message us for reactivation";
+      }
+
+      document.getElementById('expired-container').classList.remove('hidden');
+      document.getElementById('error-box').classList.add('hidden');
+    }
+
+    // Clipboard copy wrapper with toast confirmation & execCommand fallback
+    function copyValue(elementId, label) {
+      const input = document.getElementById(elementId);
+      if (!input || input.value === 'Loading...' || input.value === '------') return;
+
+      const text = input.value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast(`${label} copied!`);
+        }).catch(() => {
+          fallbackCopy(text, label);
+        });
+      } else {
+        fallbackCopy(text, label);
+      }
+    }
+
+    function fallbackCopy(text, label) {
+      try {
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.focus();
+        temp.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(temp);
+        showToast(success ? `${label} copied!` : `Please manually copy ${label}`);
+      } catch (e) {
+        showToast(`Please manually copy ${label}`);
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('credentials-container').classList.add('hidden');
+      const errorBox = document.getElementById('error-box');
+      errorBox.textContent = msg;
+      errorBox.classList.remove('hidden');
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => { toast.remove(); }, 2000);
+    }
+
+    // Returning to a backgrounded tab: redraw now and top up immediately if needed.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || !startTimerLoop.tick || sessionOver) return;
+      nextRetryAt = 0;
+      startTimerLoop.tick();
+    });
+
+    // Initialization on DOMContentLoaded:
+    // If the session was already unlocked, load the account credentials directly.
+    // Otherwise, perform a lightweight status check (check_only=true) so the "See Account Details"
+    // button is ONLY shown if the link is actually active!
+    // If the link is expired or invalid, it immediately displays the Contact Support (expired) screen.
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.__FRAMED__) return;
+      let sessionActive = null;
+      try { sessionActive = sessionStorage.getItem('gpt_portal_active'); } catch (_) {}
+      loadAccountData(sessionActive !== 'true');
+    });
+  </script>
+</body>
+
+</html>
