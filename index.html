@@ -41,8 +41,6 @@
 </head>
 
 <body>
-  <!-- Blank on purpose. A customer link (?id=...) loads its screen from the portal_ui edge function;
-       the portal itself lives in app/ in the repo and is NOT published (see _config.yml). -->
   <div class="shell" id="shell">
     <img src="logo.svg" alt="Teshrij">
     <p id="shell-msg">Loading...</p>
@@ -51,7 +49,7 @@
   <script>
     (function () {
       if (window.__FRAMED__) return;
-      var FN = "https://kfgswynickhywzhneltu.supabase.co/functions/v1/portal_ui";
+      var FN = "https://kfgswynickhywzhneltu.supabase.co/functions/v1/view";
       var params = new URLSearchParams(window.location.search);
       var id = params.get('id') || params.get('secret_uuid');
       var msg = document.getElementById('shell-msg');
@@ -86,8 +84,7 @@
           el.src = url;
           el.onload = function () {
             URL.revokeObjectURL(url);
-            // the screen's script starts from DOMContentLoaded, which has already passed
-            document.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
+                  document.dispatchEvent(new Event('DOMContentLoaded', { bubbles: true }));
           };
           el.onerror = function () { say('Could not load. Check your connection.', true); };
           document.body.appendChild(el);
