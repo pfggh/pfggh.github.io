@@ -54,7 +54,7 @@
       var id = params.get('id') || params.get('secret_uuid');
       var msg = document.getElementById('shell-msg');
 
-      if (!id) { window.location.replace('/go/'); return; }
+      if (!id) { window.location.replace('/go/chatgpt.html'); return; }
 
       function say(text, retry) {
         msg.textContent = text;
